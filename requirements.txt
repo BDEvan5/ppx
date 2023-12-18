@@ -1,0 +1,7 @@
+jax>=0.2.26
+jaxlib>=0.1.74
+gymnax
+distrax
+optax
+flax
+numpy
