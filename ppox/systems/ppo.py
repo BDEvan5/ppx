@@ -16,6 +16,7 @@ from colorama import Fore, Style
 from omegaconf import DictConfig, OmegaConf
 
 from ppox.wrappers import LogWrapper, FlattenObservationWrapper
+from ppox.types import Transition
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -53,17 +54,6 @@ class ActorCritic(nn.Module):
         )
 
         return pi, jnp.squeeze(critic, axis=-1)
-
-
-class Transition(NamedTuple):
-    done: jnp.ndarray
-    action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
-    log_prob: jnp.ndarray
-    obs: jnp.ndarray
-    info: jnp.ndarray
-
 
 
 def learn(env, network, runner_state, config, env_params, rng):
@@ -225,10 +215,15 @@ def learn(env, network, runner_state, config, env_params, rng):
         runner_state = (train_state, env_state, last_obs, rng)
         return runner_state, metric
 
-    # def learner_fn(runner_state):
+    def learner_fn(runner_state):
+        num_updates_per_eval = config["num_updates_per_eval"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+        runner_state, metric = jax.lax.scan(
+            _update_step, runner_state, None, num_updates_per_eval
+        )
 
+        return runner_state, metric
 
-    return _update_step
+    return learner_fn
 
 
 def learner_setup(config, rng, env, env_params):
@@ -290,27 +285,20 @@ def run_experiment(config):
     env = FlattenObservationWrapper(env)
     env = LogWrapper(env)
 
-    _update_step, runner_state = learner_setup(config, rng, env, env_params)
-    _update_step = jax.jit(_update_step)
-    # _update_step = jax.vmap(_update_step, )
+    learn, runner_state = learner_setup(config, rng, env, env_params)
 
     train_state, env_state, obsv, rng = runner_state
     rng, _rng = jax.random.split(rng)
 
-    # for i in range(int(config["NUM_UPDATES"])):
-    #     start_time = time.time()
-    #     # print(f"Update starting: {i}")
-    #     runner_state, metric = _update_step(runner_state, None)
-    #     # print(f"Update blocking: {i}")
-    #     jax.block_until_ready(runner_state)
-    #     # print(f"Update: {i}")
+    for i in range(int(config["NUM_EVALS"])):
+        start_time = time.time()
+        runner_state, metric = learn(runner_state)
+        jax.block_until_ready(runner_state)
 
-    #     elapsed_time = time.time() - start_time
+        print(f"Eval batch completed: {i}")
+        #TODO: add code to run evaluation here
 
-    runner_state = (train_state, env_state, obsv, _rng)
-    runner_state, metric = jax.lax.scan(
-        _update_step, runner_state, None, config["NUM_UPDATES"]
-    )
+        elapsed_time = time.time() - start_time
 
     return {"runner_state": runner_state, "metrics": metric}
 
