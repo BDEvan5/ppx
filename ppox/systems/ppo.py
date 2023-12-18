@@ -1,18 +1,21 @@
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
 import numpy as np
-import optax
+import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any
 from flax.training.train_state import TrainState
+import optax
 import distrax
 import gymnax
-from wrappers import LogWrapper, FlattenObservationWrapper
+import time 
+import hydra
+
+from typing import Sequence, NamedTuple, Any
 from rich.pretty import pprint
 from colorama import Fore, Style
-import time 
+from omegaconf import DictConfig, OmegaConf
 
+from ppox.wrappers import LogWrapper, FlattenObservationWrapper
 
 class ActorCritic(nn.Module):
     action_dim: Sequence[int]
@@ -309,31 +312,22 @@ def run_experiment(config):
         _update_step, runner_state, None, config["NUM_UPDATES"]
     )
 
-    print(f"{Fore.RED}{Style.BRIGHT}Std PPO experiment completed{Style.RESET_ALL}")
-
     return {"runner_state": runner_state, "metrics": metric}
 
 
-if __name__ == "__main__":
-    config = {
-        "LR": 2.5e-4,
-        # "NUM_ENVS": 128,
-        "NUM_ENVS": 4,
-        # "NUM_STEPS": 32,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e5,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "CartPole-v1",
-        "ANNEAL_LR": True,
-        "DEBUG": True,
-    }
 
-    run_experiment(config)
+@hydra.main(config_path="../configs", config_name="default_ppo.yaml", version_base="1.2")
+def hydra_entry_point(cfg: DictConfig) -> None:
+    """Experiment entry point."""
+    # Convert config to python dict.
+    cfg: Dict = OmegaConf.to_container(cfg, resolve=True)
+
+    print(f"{Fore.YELLOW}{Style.BRIGHT}Starting PPO experiment{Style.RESET_ALL}")
+    # Run experiment.
+    run_experiment(cfg)
+
+    print(f"{Fore.CYAN}{Style.BRIGHT}PPO experiment completed{Style.RESET_ALL}")
+
+
+if __name__ == "__main__":
+    hydra_entry_point()
