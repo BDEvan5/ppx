@@ -19,15 +19,12 @@ from ppox.network import ActorCritic
 
 
 def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
-    # TRAIN LOOP
-    # train_state, env_state, last_obs, rng = runner_state
     
+    # TRAINING LOOP
     def _update_step(learner_state, unused):
         # COLLECT TRAJECTORIES
         def _env_step(learner_state, unused):
             network_params, opt_states, env_state, last_obs, rng = learner_state
-
-            # train_state, env_state, last_obs, rng = runner_state
 
             # SELECT ACTION
             rng, _rng = jax.random.split(rng)
@@ -44,7 +41,6 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
             transition = Transition(
                 done, action, value, reward, log_prob, last_obs, info
             )
-            # runner_state = (train_state, env_state, obsv, rng)
             learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
             return learner_state, transition
 
@@ -54,7 +50,6 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
 
         # CALCULATE ADVANTAGE
         network_params, opt_states, env_state, obsv, rng = learner_state
-        # train_state, env_state, last_obs, rng = runner_state
         _, last_val = network_apply_fn(network_params, obsv)
 
         def _calculate_gae(traj_batch, last_val):
@@ -131,7 +126,6 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
                 total_loss, grads = grad_fn(
                     network_params, opt_states, traj_batch, advantages, targets
                 )
-                # train_state = train_state.apply_gradients(grads=grads)
                 network_updates, new_opt_state = update_fn(grads, opt_states)
                 new_network_params = optax.apply_updates(network_params, network_updates)
 
@@ -163,17 +157,15 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
                 _update_minbatch, (network_params, opt_states), minibatches
             )
             update_state = (new_network_params, new_opt_states, traj_batch, advantages, targets, rng)
-            #TODO: I do not think that update_state is the correct class to use
+
             return update_state, total_loss
         # Updating Training State and Metrics:
         update_state = (network_params, opt_states, traj_batch, advantages, targets, rng)
         update_state, loss_info = jax.lax.scan(
             _update_epoch, update_state, None, config["ppo_epochs"]
         )
-        # train_state = update_state[0]
         network_params, opt_states, traj_batch, advantages, targets, rng = update_state
         metric = traj_batch.info
-        # rng = update_state[-1]
         
         # Debugging mode
         if config.get("DEBUG"):
@@ -185,7 +177,6 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
             jax.debug.callback(callback, metric)
 
         learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
-        # runner_state = (train_state, env_state, last_obs, rng)
         return learner_state, metric
 
     def learner_fn(learner_state):
@@ -226,23 +217,16 @@ def learner_setup(config, rng, env, env_params):
             optax.clip_by_global_norm(config["max_grad_norm"]),
             optax.adam(config["learning_rate"], eps=1e-5),
         )
-    # train_state = TrainState.create(
-    #     apply_fn=network.apply,
-    #     params=network_params,
-    #     tx=tx,
-    # )
 
     # INIT ENV
     rng, _rng = jax.random.split(rng)
     reset_rng = jax.random.split(_rng, config["num_envs"])
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
-    # runner_state = (train_state, env_state, obsv, rng)
     opt_states = optimiser.init(network_params)
     learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
 
     learn = get_learner_fn(env, env_params, network.apply, optimiser.update, config)
-    # _update_step = learn(env, network, runner_state, config, env_params, rng)
 
     return learn, learner_state #TODO: when I add a separate evaluator, then return the network so that I can use it for evaluation
 
