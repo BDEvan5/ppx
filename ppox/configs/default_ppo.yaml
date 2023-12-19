@@ -1,27 +1,27 @@
+seed: 42
+num_updates: 1000
+rollout_length: 128
+#TODO: add an update_batch_size when it is vectorised for improved execution
 
-LR: 2.5e-4
-UPDATE_EPOCHS: 4
-NUM_MINIBATCHES: 4
+learning_rate: 2.5e-4
+ppo_epochs: 4
+num_minibatches: 4
 
-GAMMA: 0.99
-GAE_LAMBDA: 0.95
-CLIP_EPS: 0.2
-ENT_COEF: 0.01
-VF_COEF: 0.5
-MAX_GRAD_NORM: 0.5
-ACTIVATION: "tanh"
-ENV_NAME: "CartPole-v1"
+num_envs: 4
+num_evaluation: 20
+
+gamma: 0.99 # Discounting factor.
+gae_lambda: 0.95
+clip_eps: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+
+env_name: "CartPole-v1"
 ANNEAL_LR: True
+ACTIVATION: "tanh"
 DEBUG: True
 
 
-system:
-  num_updates: 1000
-  rollout_length: 128
-  #TODO: add an update_batch_size when it is vectorised for improved execution
-  
-arch:
-  num_envs: 4
-  num_evaluation: 20
 
 
