@@ -13,9 +13,9 @@ from colorama import Fore, Style
 from omegaconf import DictConfig, OmegaConf
 
 from ppox.wrappers import LogWrapper, FlattenObservationWrapper
-from ppox.types import Transition, LearnerState
+from ppox.types import Transition, LearnerState, ExperimentOutput
 from ppox.network import ActorCritic
-
+from ppox.logger import logger_setup
 
 
 def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
@@ -123,7 +123,7 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
                     return total_loss, (value_loss, loss_actor, entropy)
 
                 grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
-                total_loss, grads = grad_fn(
+                loss_info, grads = grad_fn(
                     network_params, opt_states, traj_batch, advantages, targets
                 )
                 network_updates, new_opt_state = update_fn(grads, opt_states)
@@ -132,7 +132,7 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
                 new_train_state = (new_network_params, new_opt_state)
                 #TODO: add more detailed loss information here
 
-                return new_train_state, total_loss
+                return new_train_state, loss_info
 
             network_params, opt_states, traj_batch, advantages, targets, rng = update_state
             rng, _rng = jax.random.split(rng)
@@ -170,21 +170,22 @@ def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
         # Debugging mode
         if config.get("DEBUG"):
             def callback(info):
-                return_values = info["returned_episode_returns"][info["returned_episode"]]
+                return_values = info["episode_return"][info["returned_episode"]]
                 timesteps = info["timestep"][info["returned_episode"]] * config["num_envs"]
                 for t in range(len(timesteps)):
                     print(f"Global step={timesteps[t]}, episodic return={return_values[t]}")
             jax.debug.callback(callback, metric)
 
         learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
-        return learner_state, metric
+        return learner_state, (metric, loss_info)
 
     def learner_fn(learner_state):
-        learner_state, metric = jax.lax.scan(
+        learner_state, (traj_info, loss_info) = jax.lax.scan(
             _update_step, learner_state, None, config["num_updates_per_eval"]
         )
 
-        return learner_state, metric
+        total_loss, (value_loss, loss_actor, entropy) = loss_info
+        return ExperimentOutput(learner_state, traj_info, total_loss, value_loss, loss_actor, entropy)
 
     return learner_fn
 
@@ -234,6 +235,8 @@ def learner_setup(config, rng, env, env_params):
 def run_experiment(config):
     rng = jax.random.PRNGKey(config["seed"])
     config["num_updates_per_eval"] = config["num_updates"] // config["num_evaluation"]
+    steps_per_rollout = config["rollout_length"] * config["num_updates_per_eval"] * config["num_envs"]
+    log = logger_setup(config)
 
     env, env_params = gymnax.make(config["env_name"])
     env = FlattenObservationWrapper(env)
@@ -246,15 +249,15 @@ def run_experiment(config):
 
     for i in range(config["num_evaluation"]):
         start_time = time.time()
-        learner_state, metric = learn(learner_state)
-        jax.block_until_ready(learner_state)
-
+        learner_output = learn(learner_state)
+        jax.block_until_ready(learner_output)
         elapsed_time = time.time() - start_time
-        print(f"Eval batch {i} completed in {elapsed_time} ")
+        learner_output.episodes_info["steps_per_second"] = steps_per_rollout / elapsed_time
+        log(learner_output, steps_per_rollout*(i+1), trainer_metric=True)
+
         #TODO: add code to run evaluation here
 
-
-    return {"runner_state": learner_state, "metrics": metric}
+        learner_state = learner_output.learner_state
 
 
 

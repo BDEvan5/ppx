@@ -20,8 +20,11 @@ max_grad_norm: 0.5
 env_name: "CartPole-v1"
 ANNEAL_LR: True
 ACTIVATION: "tanh"
-DEBUG: True
+DEBUG: False
 
-
-
-
+logger:
+  system_name: "PPO"
+  base_exp_path: results
+  json_path: ppo/testing
+  # json_path: ~
+  should_log: True

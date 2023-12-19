@@ -1,4 +1,4 @@
-from typing import NamedTuple, Dict
+from typing import NamedTuple, Optional, Dict
 import jax.numpy as jnp
 import chex
 from flax import struct
@@ -35,9 +35,12 @@ class LearnerState(NamedTuple):
 
 
 
-# class ExperimentOutput(NamedTuple):
-#     episodes_info: Dict[str, chex.Array]
-#     learner_state:  
-#     network_loss: chex.Array = None
+class ExperimentOutput(NamedTuple):
+    learner_state: LearnerState
+    episodes_info: Dict[str, chex.Array]
+    total_loss: Optional[chex.Array] = None
+    value_loss: Optional[chex.Array] = None
+    loss_actor: Optional[chex.Array] = None
+    entropy: Optional[chex.Array] = None
 
 

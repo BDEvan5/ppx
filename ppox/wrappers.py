@@ -95,8 +95,10 @@ class LogWrapper(GymnaxWrapper):
             + new_episode_length * done,
             timestep=state.timestep + 1,
         )
-        info["returned_episode_returns"] = state.returned_episode_returns
-        info["returned_episode_lengths"] = state.returned_episode_lengths
+        info["episode_return"] = state.returned_episode_returns
+        info["episode_length"] = state.returned_episode_lengths
+        # info["returned_episode_returns"] = state.returned_episode_returns
+        # info["returned_episode_lengths"] = state.returned_episode_lengths
         info["timestep"] = state.timestep
         info["returned_episode"] = done
         return obs, state, reward, done, info
