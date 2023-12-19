@@ -1,4 +1,4 @@
-from typing import NamedTuple, Optional, Dict
+from typing import NamedTuple, Optional, Dict, Any
 import jax.numpy as jnp
 import chex
 from flax import struct
@@ -43,4 +43,13 @@ class ExperimentOutput(NamedTuple):
     loss_actor: Optional[chex.Array] = None
     entropy: Optional[chex.Array] = None
 
+class EvalState(NamedTuple):
+    """State of the evaluator."""
 
+    key: chex.PRNGKey
+    env_state: Any
+    # timestep: TimeStep
+    last_observation: chex.Array
+    step_count_: chex.Numeric
+    return_: chex.Numeric
+    done: bool

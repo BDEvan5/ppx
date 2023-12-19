@@ -21,6 +21,8 @@ env_name: "CartPole-v1"
 ANNEAL_LR: True
 ACTIVATION: "tanh"
 DEBUG: False
+evaluation_greedy: False
+num_eval_episodes: 5
 
 logger:
   system_name: "PPO"

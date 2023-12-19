@@ -16,7 +16,7 @@ from ppox.wrappers import LogWrapper, FlattenObservationWrapper
 from ppox.types import Transition, LearnerState, ExperimentOutput
 from ppox.network import ActorCritic
 from ppox.logger import logger_setup
-
+from ppox.evaluator import evaluator_setup
 
 def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
     
@@ -229,7 +229,7 @@ def learner_setup(config, rng, env, env_params):
 
     learn = get_learner_fn(env, env_params, network.apply, optimiser.update, config)
 
-    return learn, learner_state #TODO: when I add a separate evaluator, then return the network so that I can use it for evaluation
+    return learn, learner_state, network
 
 
 def run_experiment(config):
@@ -242,10 +242,12 @@ def run_experiment(config):
     env = FlattenObservationWrapper(env)
     env = LogWrapper(env)
 
-    learn, learner_state = learner_setup(config, rng, env, env_params)
-
+    learn, learner_state, network = learner_setup(config, rng, env, env_params)
     network_params, opt_states, env_state, obsv, rng = learner_state
     rng, _rng = jax.random.split(rng)
+    rng, eval_rng = jax.random.split(rng)
+
+    evaluator, absolute_metric_evaluator = evaluator_setup(env, env_params, network, config)
 
     for i in range(config["num_evaluation"]):
         start_time = time.time()
@@ -255,10 +257,24 @@ def run_experiment(config):
         learner_output.episodes_info["steps_per_second"] = steps_per_rollout / elapsed_time
         log(learner_output, steps_per_rollout*(i+1), trainer_metric=True)
 
-        #TODO: add code to run evaluation here
+        start_time = time.time()
+        evaluator_output = evaluator(learner_state.network_params, eval_rng)
+        jax.block_until_ready(evaluator_output)
+
+        elapsed_time = time.time() - start_time
+        evaluator_output.episodes_info["steps_per_second"] = steps_per_rollout / elapsed_time
+        log(evaluator_output, steps_per_rollout*(i+1), eval_step=i)
 
         learner_state = learner_output.learner_state
 
+
+    start_time = time.time()
+    evaluator_output = absolute_metric_evaluator(learner_state.network_params, eval_rng)
+    jax.block_until_ready(evaluator_output)
+
+    elapsed_time = time.time() - start_time
+    evaluator_output.episodes_info["steps_per_second"] = steps_per_rollout / elapsed_time
+    log(evaluator_output, steps_per_rollout*(i+1), absolute_metric=True)
 
 
 @hydra.main(config_path="../configs", config_name="default_ppo.yaml", version_base="1.2")
