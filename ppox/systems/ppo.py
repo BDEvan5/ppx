@@ -34,7 +34,7 @@ def learn(env, network, runner_state, config, env_params, rng):
 
             # STEP ENV
             rng, _rng = jax.random.split(rng)
-            rng_step = jax.random.split(_rng, config["NUM_ENVS"])
+            rng_step = jax.random.split(_rng, config["arch"]["num_envs"])
             obsv, env_state, reward, done, info = jax.vmap(
                 env.step, in_axes=(0, 0, 0, None)
             )(rng_step, env_state, action, env_params)
@@ -45,7 +45,7 @@ def learn(env, network, runner_state, config, env_params, rng):
             return runner_state, transition
 
         runner_state, traj_batch = jax.lax.scan(
-            _env_step, runner_state, None, config["NUM_STEPS"]
+            _env_step, runner_state, None, config["system"]["rollout_length"]
         )
 
         # CALCULATE ADVANTAGE
@@ -131,9 +131,10 @@ def learn(env, network, runner_state, config, env_params, rng):
             train_state, traj_batch, advantages, targets, rng = update_state
             rng, _rng = jax.random.split(rng)
             # Batching and Shuffling
-            batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
+            batch_size = config["system"]["rollout_length"] * config["arch"]["num_envs"]
+            # batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
             assert (
-                batch_size == config["NUM_STEPS"] * config["NUM_ENVS"]
+                batch_size == config["system"]["rollout_length"] * config["arch"]["num_envs"]
             ), "batch size must be equal to number of steps * number of envs"
             permutation = jax.random.permutation(_rng, batch_size)
             batch = (traj_batch, advantages, targets)
@@ -168,7 +169,7 @@ def learn(env, network, runner_state, config, env_params, rng):
         if config.get("DEBUG"):
             def callback(info):
                 return_values = info["returned_episode_returns"][info["returned_episode"]]
-                timesteps = info["timestep"][info["returned_episode"]] * config["NUM_ENVS"]
+                timesteps = info["timestep"][info["returned_episode"]] * config["arch"]["num_envs"]
                 for t in range(len(timesteps)):
                     print(f"Global step={timesteps[t]}, episodic return={return_values[t]}")
             jax.debug.callback(callback, metric)
@@ -177,9 +178,8 @@ def learn(env, network, runner_state, config, env_params, rng):
         return runner_state, metric
 
     def learner_fn(runner_state):
-        num_updates_per_eval = config["num_updates_per_eval"] // config["NUM_STEPS"] // config["NUM_ENVS"]
         runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, num_updates_per_eval
+            _update_step, runner_state, None, config["system"]["num_updates_per_eval"]
         )
 
         return runner_state, metric
@@ -193,7 +193,7 @@ def learner_setup(config, rng, env, env_params):
         frac = (
             1.0
             - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"]))
-            / config["NUM_UPDATES"]
+            / config["system"]["num_updates"]
         )
         return config["LR"] * frac
 
@@ -223,7 +223,7 @@ def learner_setup(config, rng, env, env_params):
 
     # INIT ENV
     rng, _rng = jax.random.split(rng)
-    reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
+    reset_rng = jax.random.split(_rng, config["arch"]["num_envs"])
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
     runner_state = (train_state, env_state, obsv, rng)
@@ -235,12 +235,15 @@ def learner_setup(config, rng, env, env_params):
 def run_experiment(config):
     rng = jax.random.PRNGKey(30)
 
-    config["NUM_UPDATES"] = int(
-        config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
-    )
-    config["MINIBATCH_SIZE"] = (
-        config["NUM_ENVS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
-    )
+    # config["NUM_UPDATES"] = int(
+    #     config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+    # )
+    # config["MINIBATCH_SIZE"] = (
+    #     config["NUM_ENVS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
+    # )
+
+    config["system"]["num_updates_per_eval"] = config["system"]["num_updates"] // config["arch"]["num_evaluation"]
+    config["system"]["mini_batch_size"] = config["arch"]["num_envs"] * config["system"]["rollout_length"] // config["NUM_MINIBATCHES"]
 
     env, env_params = gymnax.make(config["ENV_NAME"])
     env = FlattenObservationWrapper(env)
@@ -251,15 +254,15 @@ def run_experiment(config):
     train_state, env_state, obsv, rng = runner_state
     rng, _rng = jax.random.split(rng)
 
-    for i in range(int(config["NUM_EVALS"])):
+    for i in range(config["arch"]["num_evaluation"]):
         start_time = time.time()
         runner_state, metric = learn(runner_state)
         jax.block_until_ready(runner_state)
 
-        print(f"Eval batch completed: {i}")
+        elapsed_time = time.time() - start_time
+        print(f"Eval batch {i} completed in {elapsed_time} ")
         #TODO: add code to run evaluation here
 
-        elapsed_time = time.time() - start_time
 
     return {"runner_state": runner_state, "metrics": metric}
 

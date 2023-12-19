@@ -5,24 +5,32 @@ It also includes that batch size-invariant version, which uses exponetially weig
 
 ## Usage
 
-To run a sysem, 
-
+To run a system, you need to execute the following command:
+```python
+python3 ppox/systems/ppo.py 
+```
+Since [hydra](https://hydra.cc/docs/intro/) is used for managing configurations, overide parameters can be passed as arguments to this command.
 
 ## Installation
-
-Install dependencies using the requirements.txt file:
-
-```
-pip install -r requirements.txt
-```
-
-In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
 
 We recommend managing dependencies using a virtual environment, which can be installed with the following commands,
 ```
 python3.9 -m venv venv
 source venv/bin/activate
 ```
+
+Install dependencies using the requirements.txt file:
+
+```
+pip install -r requirements.txt
+```
+The codebase is installed as a pip package with the following command:
+```
+pip install -e .
+```
+
+In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
+
 
 ## Acknowledgements
 

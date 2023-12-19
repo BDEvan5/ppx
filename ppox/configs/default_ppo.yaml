@@ -1,12 +1,7 @@
 
 LR: 2.5e-4
-NUM_ENVS: 4
-NUM_STEPS: 128
-TOTAL_TIMESTEPS: 5e5
 UPDATE_EPOCHS: 4
 NUM_MINIBATCHES: 4
-num_updates_per_eval: 5e4
-NUM_EVALS: 10
 
 GAMMA: 0.99
 GAE_LAMBDA: 0.95
@@ -18,3 +13,15 @@ ACTIVATION: "tanh"
 ENV_NAME: "CartPole-v1"
 ANNEAL_LR: True
 DEBUG: True
+
+
+system:
+  num_updates: 1000
+  rollout_length: 128
+  #TODO: add an update_batch_size when it is vectorised for improved execution
+  
+arch:
+  num_envs: 4
+  num_evaluation: 20
+
+
