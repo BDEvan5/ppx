@@ -1,5 +1,8 @@
-from typing import NamedTuple
+from typing import NamedTuple, Dict
 import jax.numpy as jnp
+import chex
+from flax import struct
+from gymnax.environments import environment, spaces
 
 
 class Transition(NamedTuple):
@@ -10,3 +13,31 @@ class Transition(NamedTuple):
     log_prob: jnp.ndarray
     obs: jnp.ndarray
     info: jnp.ndarray
+
+
+@struct.dataclass
+class LogEnvState:
+    env_state: environment.EnvState
+    episode_returns: float
+    episode_lengths: int
+    returned_episode_returns: float
+    returned_episode_lengths: int
+    timestep: int
+
+
+class LearnerState(NamedTuple):
+    network_params: chex.Array
+    opt_state: chex.Array
+    env_state: LogEnvState
+    last_observation: chex.Array
+    rng_key: chex.Array
+
+
+
+
+# class ExperimentOutput(NamedTuple):
+#     episodes_info: Dict[str, chex.Array]
+#     learner_state:  
+#     network_loss: chex.Array = None
+
+

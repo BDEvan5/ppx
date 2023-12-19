@@ -13,23 +13,25 @@ from colorama import Fore, Style
 from omegaconf import DictConfig, OmegaConf
 
 from ppox.wrappers import LogWrapper, FlattenObservationWrapper
-from ppox.types import Transition
+from ppox.types import Transition, LearnerState
 from ppox.network import ActorCritic
 
 
 
-def learn(env, network, runner_state, config, env_params, rng):
+def get_learner_fn(env, env_params, network_apply_fn, update_fn, config):
     # TRAIN LOOP
-    train_state, env_state, last_obs, rng = runner_state
+    # train_state, env_state, last_obs, rng = runner_state
     
-    def _update_step(runner_state, unused):
+    def _update_step(learner_state, unused):
         # COLLECT TRAJECTORIES
-        def _env_step(runner_state, unused):
-            train_state, env_state, last_obs, rng = runner_state
+        def _env_step(learner_state, unused):
+            network_params, opt_states, env_state, last_obs, rng = learner_state
+
+            # train_state, env_state, last_obs, rng = runner_state
 
             # SELECT ACTION
             rng, _rng = jax.random.split(rng)
-            pi, value = network.apply(train_state.params, last_obs)
+            pi, value = network_apply_fn(network_params, last_obs)
             action = pi.sample(seed=_rng)
             log_prob = pi.log_prob(action)
 
@@ -42,16 +44,18 @@ def learn(env, network, runner_state, config, env_params, rng):
             transition = Transition(
                 done, action, value, reward, log_prob, last_obs, info
             )
-            runner_state = (train_state, env_state, obsv, rng)
-            return runner_state, transition
+            # runner_state = (train_state, env_state, obsv, rng)
+            learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
+            return learner_state, transition
 
-        runner_state, traj_batch = jax.lax.scan(
-            _env_step, runner_state, None, config["rollout_length"]
+        learner_state, traj_batch = jax.lax.scan(
+            _env_step, learner_state, None, config["rollout_length"]
         )
 
         # CALCULATE ADVANTAGE
-        train_state, env_state, last_obs, rng = runner_state
-        _, last_val = network.apply(train_state.params, last_obs)
+        network_params, opt_states, env_state, obsv, rng = learner_state
+        # train_state, env_state, last_obs, rng = runner_state
+        _, last_val = network_apply_fn(network_params, obsv)
 
         def _calculate_gae(traj_batch, last_val):
             def _get_advantages(gae_and_next_value, transition):
@@ -83,10 +87,11 @@ def learn(env, network, runner_state, config, env_params, rng):
         def _update_epoch(update_state, unused):
             def _update_minbatch(train_state, batch_info):
                 traj_batch, advantages, targets = batch_info
+                network_params, opt_states = train_state
 
-                def _loss_fn(params, traj_batch, gae, targets):
+                def _loss_fn(params, opt_states, traj_batch, gae, targets):
                     # RERUN NETWORK
-                    pi, value = network.apply(params, traj_batch.obs)
+                    pi, value = network_apply_fn(params, traj_batch.obs)
                     log_prob = pi.log_prob(traj_batch.action)
 
                     # CALCULATE VALUE LOSS
@@ -124,18 +129,21 @@ def learn(env, network, runner_state, config, env_params, rng):
 
                 grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
                 total_loss, grads = grad_fn(
-                    train_state.params, traj_batch, advantages, targets
+                    network_params, opt_states, traj_batch, advantages, targets
                 )
-                train_state = train_state.apply_gradients(grads=grads)
-                return train_state, total_loss
+                # train_state = train_state.apply_gradients(grads=grads)
+                network_updates, new_opt_state = update_fn(grads, opt_states)
+                new_network_params = optax.apply_updates(network_params, network_updates)
 
-            train_state, traj_batch, advantages, targets, rng = update_state
+                new_train_state = (new_network_params, new_opt_state)
+                #TODO: add more detailed loss information here
+
+                return new_train_state, total_loss
+
+            network_params, opt_states, traj_batch, advantages, targets, rng = update_state
             rng, _rng = jax.random.split(rng)
             # Batching and Shuffling
             batch_size = config["rollout_length"] * config["num_envs"]
-            assert (
-                batch_size == config["rollout_length"] * config["num_envs"]
-            ), "batch size must be equal to number of steps * number of envs"
             permutation = jax.random.permutation(_rng, batch_size)
             batch = (traj_batch, advantages, targets)
             batch = jax.tree_util.tree_map(
@@ -151,19 +159,21 @@ def learn(env, network, runner_state, config, env_params, rng):
                 ),
                 shuffled_batch,
             )
-            train_state, total_loss = jax.lax.scan(
-                _update_minbatch, train_state, minibatches
+            (new_network_params, new_opt_states), total_loss = jax.lax.scan(
+                _update_minbatch, (network_params, opt_states), minibatches
             )
-            update_state = (train_state, traj_batch, advantages, targets, rng)
+            update_state = (new_network_params, new_opt_states, traj_batch, advantages, targets, rng)
+            #TODO: I do not think that update_state is the correct class to use
             return update_state, total_loss
         # Updating Training State and Metrics:
-        update_state = (train_state, traj_batch, advantages, targets, rng)
+        update_state = (network_params, opt_states, traj_batch, advantages, targets, rng)
         update_state, loss_info = jax.lax.scan(
             _update_epoch, update_state, None, config["ppo_epochs"]
         )
-        train_state = update_state[0]
+        # train_state = update_state[0]
+        network_params, opt_states, traj_batch, advantages, targets, rng = update_state
         metric = traj_batch.info
-        rng = update_state[-1]
+        # rng = update_state[-1]
         
         # Debugging mode
         if config.get("DEBUG"):
@@ -174,15 +184,16 @@ def learn(env, network, runner_state, config, env_params, rng):
                     print(f"Global step={timesteps[t]}, episodic return={return_values[t]}")
             jax.debug.callback(callback, metric)
 
-        runner_state = (train_state, env_state, last_obs, rng)
-        return runner_state, metric
+        learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
+        # runner_state = (train_state, env_state, last_obs, rng)
+        return learner_state, metric
 
-    def learner_fn(runner_state):
-        runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, config["num_updates_per_eval"]
+    def learner_fn(learner_state):
+        learner_state, metric = jax.lax.scan(
+            _update_step, learner_state, None, config["num_updates_per_eval"]
         )
 
-        return runner_state, metric
+        return learner_state, metric
 
     return learner_fn
 
@@ -206,30 +217,34 @@ def learner_setup(config, rng, env, env_params):
     init_x = jnp.zeros(env.observation_space(env_params).shape)
     network_params = network.init(_rng, init_x)
     if config["ANNEAL_LR"]:
-        tx = optax.chain(
+        optimiser = optax.chain(
             optax.clip_by_global_norm(config["max_grad_norm"]),
             optax.adam(learning_rate=linear_schedule, eps=1e-5),
         )
     else:
-        tx = optax.chain(
+        optimiser = optax.chain(
             optax.clip_by_global_norm(config["max_grad_norm"]),
             optax.adam(config["learning_rate"], eps=1e-5),
         )
-    train_state = TrainState.create(
-        apply_fn=network.apply,
-        params=network_params,
-        tx=tx,
-    )
+    # train_state = TrainState.create(
+    #     apply_fn=network.apply,
+    #     params=network_params,
+    #     tx=tx,
+    # )
 
     # INIT ENV
     rng, _rng = jax.random.split(rng)
     reset_rng = jax.random.split(_rng, config["num_envs"])
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
-    runner_state = (train_state, env_state, obsv, rng)
-    _update_step = learn(env, network, runner_state, config, env_params, rng)
+    # runner_state = (train_state, env_state, obsv, rng)
+    opt_states = optimiser.init(network_params)
+    learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
 
-    return _update_step, runner_state #TODO: when I add a separate evaluator, then return the network so that I can use it for evaluation
+    learn = get_learner_fn(env, env_params, network.apply, optimiser.update, config)
+    # _update_step = learn(env, network, runner_state, config, env_params, rng)
+
+    return learn, learner_state #TODO: when I add a separate evaluator, then return the network so that I can use it for evaluation
 
 
 def run_experiment(config):
@@ -240,22 +255,22 @@ def run_experiment(config):
     env = FlattenObservationWrapper(env)
     env = LogWrapper(env)
 
-    learn, runner_state = learner_setup(config, rng, env, env_params)
+    learn, learner_state = learner_setup(config, rng, env, env_params)
 
-    train_state, env_state, obsv, rng = runner_state
+    network_params, opt_states, env_state, obsv, rng = learner_state
     rng, _rng = jax.random.split(rng)
 
     for i in range(config["num_evaluation"]):
         start_time = time.time()
-        runner_state, metric = learn(runner_state)
-        jax.block_until_ready(runner_state)
+        learner_state, metric = learn(learner_state)
+        jax.block_until_ready(learner_state)
 
         elapsed_time = time.time() - start_time
         print(f"Eval batch {i} completed in {elapsed_time} ")
         #TODO: add code to run evaluation here
 
 
-    return {"runner_state": runner_state, "metrics": metric}
+    return {"runner_state": learner_state, "metrics": metric}
 
 
 
