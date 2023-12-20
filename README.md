@@ -10,6 +10,10 @@ To run a system, you need to execute the following command:
 python3 ppox/systems/ppo.py 
 ```
 Since [hydra](https://hydra.cc/docs/intro/) is used for managing configurations, overide parameters can be passed as arguments to this command.
+The default parameters can be changes in the relevant config file.
+
+A simple function to plot the return during training is provided in the `notebooks/` directory.
+
 
 ## Installation
 
@@ -31,6 +35,9 @@ pip install -e .
 
 In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
 
+
+### Possible improvements
+- Add an env wrapper to use the [Jumanji](https://github.com/instadeepai/jumanji/) style step method which returns a `state` and `Timestep`.
 
 ## Acknowledgements
 

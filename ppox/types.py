@@ -1,9 +1,10 @@
-from typing import NamedTuple, Optional, Dict, Any
+from typing import NamedTuple, Optional, Dict, Any, Callable, Tuple
+from flax.core.frozen_dict import FrozenDict
 import jax.numpy as jnp
 import chex
 from flax import struct
 from gymnax.environments import environment, spaces
-
+import distrax
 
 class Transition(NamedTuple):
     done: jnp.ndarray
@@ -53,3 +54,10 @@ class EvalState(NamedTuple):
     step_count_: chex.Numeric
     return_: chex.Numeric
     done: bool
+
+
+NetworkApply = Callable[[FrozenDict, chex.Array], Tuple[distrax.Distribution, chex.Array]]
+LearnerFn = Callable[[LearnerState], ExperimentOutput]
+EvalFn = Callable[[FrozenDict, chex.PRNGKey], ExperimentOutput]
+
+
