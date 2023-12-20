@@ -13,14 +13,118 @@
 # limitations under the License.
 
 """Logger setup."""
-from typing import Dict, Optional, Protocol
 
+from typing import Dict, Optional, Protocol
 import jax.numpy as jnp
 import numpy as np
 from colorama import Fore, Style
+from datetime import datetime
+import json
+import logging
+import os
+import time
 
 from ppox.types import ExperimentOutput
-from ppox.logger_tools import Logger
+
+class JsonLogger:
+    def __init__(self, cfg: Dict) -> None:
+        self.should_log = cfg["logger"]["should_log"]
+        self.console_logger = get_python_logger()
+
+        if cfg["logger"]["json_path"] is not None:
+            self.path = cfg["logger"]["base_exp_path"] + "/" + cfg["logger"]["json_path"]
+        else:
+            self.path = (
+                f"{cfg['logger']['base_exp_path']}/"
+                + f"{cfg['logger']['system_name']}/{cfg['env_name']}"
+                + f"/envs_{cfg['num_envs']}/seed_{cfg['seed']}/"
+                + f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            )
+
+        self.file_name = "metrics.json"
+        self.run_data: Dict = {"absolute_metrics": {}}
+
+        # If the file already exists, load it
+        if os.path.isfile(f"{self.path}/{self.file_name}"):
+            with open(f"{self.path}/{self.file_name}", "r") as f:
+                data = json.load(f)
+
+        else:
+            # Create the logging directory if it doesn't exist
+            os.makedirs(self.path, exist_ok=True)
+            data = {}
+
+        algorithm_name = cfg["logger"]["system_name"]
+        environment_name = cfg["env_name"]
+        # Merge the existing data with the new data
+        self.data = data
+        if environment_name not in self.data:
+            self.data[environment_name] = {}
+        if algorithm_name not in self.data[environment_name]:
+            self.data[environment_name][algorithm_name] = {}
+        self.data[environment_name][algorithm_name][f"seed_{cfg['seed']}"] = self.run_data
+
+        with open(f"{self.path}/{self.file_name}", "w") as f:
+            json.dump(self.data, f, indent=4)
+
+
+    def log_stat(
+        self,
+        key: str,
+        value: float,
+        timestep: int,
+        evaluation_step: Optional[int] = None,
+    ) -> None:
+        """
+        Writes a step to the json reporting file
+
+        Args:
+            key (str): the metric that should be logged
+            value (str): the value of the metric that should be logged
+            timestep (int): the current environment timestep
+            evaluation_step (int): the evaluation step
+        """
+
+        current_time = time.time()
+
+        # This will ensure the first logged time is 0, which avoids taking compilation into account
+        # when plotting downstream.
+        if evaluation_step == 0:
+            self.start_time = current_time
+
+        logging_prefix, *metric_key = key.split("/")
+        metric_key = "/".join(metric_key)
+
+        metrics = {metric_key: [value]}
+
+        if logging_prefix == "evaluator":
+            step_metrics = {"step_count": timestep, "elapsed_time": current_time - self.start_time}
+            step_metrics.update(metrics)  # type: ignore
+            step_str = f"step_{evaluation_step}"
+            if step_str in self.run_data:
+                self.run_data[step_str].update(step_metrics)
+            else:
+                self.run_data[step_str] = step_metrics
+
+        # Store the absolute metrics
+        if logging_prefix == "absolute":
+            self.run_data["absolute_metrics"].update(metrics)
+
+        with open(f"{self.path}/{self.file_name}", "w") as f:
+            json.dump(self.data, f, indent=4)
+
+def get_python_logger() -> logging.Logger:
+    """Set up a custom python logger."""
+    logger = logging.getLogger()
+    logger.handlers = []
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter(f"{Fore.CYAN}{Style.BRIGHT}%(message)s", "%H:%M:%S")
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    # Set to info to suppress debug outputs.
+    logger.setLevel("INFO")
+
+    return logger
 
 
 # Not in types.py because we only use it here.
@@ -36,7 +140,7 @@ class LogFn(Protocol):
         ...
 
 
-def get_logger_tools(logger: Logger) -> LogFn:  # noqa: CCR001
+def get_logger_tools(logger: JsonLogger) -> LogFn:  
     """Get the logger function."""
 
     def log(
@@ -134,5 +238,5 @@ def get_logger_tools(logger: Logger) -> LogFn:  # noqa: CCR001
 
 def logger_setup(config: Dict) -> LogFn:
     """Setup the logger."""
-    logger = Logger(config)
+    logger = JsonLogger(config)
     return get_logger_tools(logger)
