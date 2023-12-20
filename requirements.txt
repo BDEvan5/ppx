@@ -5,3 +5,7 @@ distrax
 optax
 flax
 numpy
+colorama
+hydra-core==1.3.2
+omegaconf
+pandas

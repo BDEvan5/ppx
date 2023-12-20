@@ -2,11 +2,10 @@ import jax
 import jax.numpy as jnp
 import chex
 import numpy as np
-from flax import struct
 from functools import partial
 from typing import Optional, Tuple, Union, Any
 from gymnax.environments import environment, spaces
-
+from ppox.types import LogEnvState
 
 class GymnaxWrapper(object):
     """Base class for Gymnax wrappers."""
@@ -57,14 +56,6 @@ class FlattenObservationWrapper(GymnaxWrapper):
         return obs, state, reward, done, info
 
 
-@struct.dataclass
-class LogEnvState:
-    env_state: environment.EnvState
-    episode_returns: float
-    episode_lengths: int
-    returned_episode_returns: float
-    returned_episode_lengths: int
-    timestep: int
 
 
 class LogWrapper(GymnaxWrapper):
@@ -104,8 +95,10 @@ class LogWrapper(GymnaxWrapper):
             + new_episode_length * done,
             timestep=state.timestep + 1,
         )
-        info["returned_episode_returns"] = state.returned_episode_returns
-        info["returned_episode_lengths"] = state.returned_episode_lengths
+        info["episode_return"] = state.returned_episode_returns
+        info["episode_length"] = state.returned_episode_lengths
+        # info["returned_episode_returns"] = state.returned_episode_returns
+        # info["returned_episode_lengths"] = state.returned_episode_lengths
         info["timestep"] = state.timestep
         info["returned_episode"] = done
         return obs, state, reward, done, info
