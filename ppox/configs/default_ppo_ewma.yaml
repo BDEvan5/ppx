@@ -11,7 +11,7 @@ learning_rate: 2.5e-4
 ppo_epochs: 4
 num_minibatches: 4
 
-num_envs: 16
+num_envs: 8
 num_evaluation: 100
 
 gamma: 0.99 # Discounting factor.
@@ -37,7 +37,7 @@ logger:
   system_name: "PPO"
   base_exp_path: results
   # json_path: ppo_ex1/env4
-  json_path: experiments/env16
+  json_path: experiments/env8
   # json_path: ppo/test2
   # json_path: ~
   should_log: True

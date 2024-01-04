@@ -326,6 +326,7 @@ def learner_setup(
 
 def run_experiment(config: Dict) -> None:
     rng = jax.random.PRNGKey(config["seed"])
+    config["num_updates"] = int(config['total_training_steps'] // (config['rollout_length'] * config['num_envs']))
     config["num_updates_per_eval"] = config["num_updates"] // config["num_evaluation"]
     steps_per_rollout = (
         config["rollout_length"] * config["num_updates_per_eval"] * config["num_envs"]

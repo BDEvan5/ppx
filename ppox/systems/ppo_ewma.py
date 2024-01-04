@@ -63,6 +63,34 @@ class ActorCritic(nn.Module):
         return pi, jnp.squeeze(critic, axis=-1)
 
 
+class EwmaModel:
+    """
+    An EWMA-lagged copy of an ActorCritic model.
+    """
+
+    def __init__(self, model, ewma_decay=0.9):
+        super().__init__()
+        self.model = model
+        self.ewma_decay = ewma_decay
+        self.model_ewma = deepcopy(model)
+        self.total_weight = 1
+
+    def forward(self, *args, **kwargs):
+        return self.model_ewma(*args, **kwargs)
+
+    def update(self, decay=None):
+        if decay is None:
+            decay = self.ewma_decay
+        new_total_weight = decay * self.total_weight + 1
+        decayed_weight_ratio = decay * self.total_weight / new_total_weight
+        for p, p_ewma in zip(self.model.parameters(), self.model_ewma.parameters()):
+            p_ewma.data.mul_(decayed_weight_ratio).add_(p.data / new_total_weight)
+        self.total_weight = new_total_weight
+
+    def reset(self):
+        self.update(decay=0)
+
+
 def get_learner_fn(
     env: Environment,
     env_params: EnvParams,
@@ -160,6 +188,11 @@ def get_learner_fn(
                     )
 
                     # CALCULATE ACTOR LOSS
+                    # this is where the modifications are going to come. Currently we use the log probs that we calculated with the current policy and the behavioural policy
+                    # this should be changed to use the log probs calculated with the behavioural policy and the ewma policy
+                    # this is the only change that needs to be made to the code....
+                    # I think that I can use the same network, I just need to adjust the parameters accordingly... 
+                    # 
                     ratio = jnp.exp(log_prob - traj_batch.log_prob)
                     gae = (gae - gae.mean()) / (gae.std() + 1e-8)
                     loss_actor1 = ratio * gae
@@ -326,6 +359,7 @@ def learner_setup(
 
 def run_experiment(config: Dict) -> None:
     rng = jax.random.PRNGKey(config["seed"])
+    config["num_updates"] = int(config['total_training_steps'] // (config['rollout_length'] * config['num_envs']))
     config["num_updates_per_eval"] = config["num_updates"] // config["num_evaluation"]
     steps_per_rollout = (
         config["rollout_length"] * config["num_updates_per_eval"] * config["num_envs"]
@@ -379,7 +413,7 @@ def run_experiment(config: Dict) -> None:
 
 
 @hydra.main(
-    config_path="../configs", config_name="default_ppo.yaml", version_base="1.2"
+    config_path="../configs", config_name="default_ppo_ewma.yaml", version_base="1.2"
 )
 def hydra_entry_point(cfg: DictConfig) -> None:
     """Experiment entry point."""
