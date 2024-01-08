@@ -1,17 +1,15 @@
 seed: 42
-# total_training_steps: 8e6
-total_training_steps: 5e5
-rollout_length: 128
-
-ewma_decay: 0.899
+total_training_steps: 8e6
+rollout_length: 256
 
 # learning_rate: 5e-4
 learning_rate: 2.5e-4
 ppo_epochs: 4
 num_minibatches: 4
 
-num_envs: 4
-num_evaluation: 15
+num_envs: 8
+# num_envs: 1
+num_evaluation: 50
 
 gamma: 0.99 # Discounting factor.
 gae_lambda: 0.95
@@ -22,19 +20,15 @@ max_grad_norm: 0.5
 
 # env_name: "Asterix-MinAtar"
 # env_name: "Freeway-MinAtar"
-# env_name: "SpaceInvaders-MinAtar"
-# env_name: "MountainCar-v0" # does not work
-# env_name: "Acrobot-v1"
-env_name: "CartPole-v1"
-ANNEAL_LR: True
+env_name: "SpaceInvaders-MinAtar"
+ANNEAL_LR: False
 ACTIVATION: "tanh"
 DEBUG: False
 evaluation_greedy: False
 num_eval_episodes: 5
 
 logger:
-  system_name: "ppo_ewma"
+  system_name: "ppo"
   base_exp_path: results
-  # json_path: ppoe/env4
   json_path: ~
   should_log: True
