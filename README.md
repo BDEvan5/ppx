@@ -33,6 +33,11 @@ The codebase is installed as a pip package with the following command:
 pip install -e .
 ```
 
+Note JAX must be separately installed for the specific device used. For straightforward CPU usage use,
+```
+pip install -U "jax[cpu]"
+```
+
 In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
 
 

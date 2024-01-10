@@ -8,8 +8,8 @@ rollout_length: 128
 # rollout_length: 256
 #TODO: add an update_batch_size when it is vectorised for improved execution
 
-# learning_rate: 5e-4
-learning_rate: 2.5e-4
+learning_rate: 5e-4
+# learning_rate: 2.5e-4
 ppo_epochs: 4
 num_minibatches: 4
 

@@ -64,33 +64,6 @@ class ActorCritic(nn.Module):
         return pi, jnp.squeeze(critic, axis=-1)
 
 
-class EwmaModel:
-    """
-    An EWMA-lagged copy of an ActorCritic model.
-    """
-
-    def __init__(self, model, ewma_decay=0.9):
-        super().__init__()
-        self.model = model
-        self.ewma_decay = ewma_decay
-        self.model_ewma = deepcopy(model)
-        self.total_weight = 1
-
-    def forward(self, *args, **kwargs):
-        return self.model_ewma(*args, **kwargs)
-
-    def update(self, decay=None):
-        if decay is None:
-            decay = self.ewma_decay
-        new_total_weight = decay * self.total_weight + 1
-        decayed_weight_ratio = decay * self.total_weight / new_total_weight
-        for p, p_ewma in zip(self.model.parameters(), self.model_ewma.parameters()): #TODO: this is not correct.
-            p_ewma.data.mul_(decayed_weight_ratio).add_(p.data / new_total_weight)
-        self.total_weight = new_total_weight
-        # this needs to be rewritten to as a function that takes in the model and the ewma model and updates the ewma model
-
-    def reset(self):
-        self.update(decay=0)
 
 
 def get_learner_fn(
@@ -199,7 +172,7 @@ def get_learner_fn(
                     # 
                     ratio = jnp.exp(log_prob - prox_log_prob)
                     # ratio = jnp.exp(log_prob - traj_batch.log_prob) #ol
-                    gae = (gae - gae.mean()) / (gae.std() + 1e-8)
+                    gae = (gae - gae.mean()) / (gae.std() + 1e-8) #Advantage normalisation
                     loss_actor1 = ratio * gae
                     loss_actor2 = (
                         jnp.clip(
@@ -267,20 +240,7 @@ def get_learner_fn(
                 _update_minbatch, (network_params, opt_states), minibatches
             )
 
-            # def update_ewma_model(ewma_params, network_params, total_weight):
-            #     ewma_decay = config["ewma_decay"]
-            #     new_weight = 1 + total_weight * ewma_decay
-            #     for p, p_ewma in zip(network_params.parameters(), ewma_params.parameters()):
-            #         p_ewma.data = p.data / new_weight + p_ewma.data * ewma_decay * total_weight / new_weight
-            #     return ewma_params
-
-            # def update_ewma_model(ewma_params, network_params, total_weight, new_weight):
-            #     for p, p_ewma in zip(network_params.parameters(), ewma_params.parameters()):
-            #         p_ewma.data = p.data / new_weight + p_ewma.data * config["ewma_decay"] * total_weight / new_weight
-            #     return ewma_params
-
-            # new_ewma_params = update_ewma_model(ewma_params, network_params, ewma_weight)
-
+            # Update Ewma Parameters
             ewma_decay = config["ewma_decay"]
             new_weight = 1 + total_weight * ewma_decay
             new_ewma_params = jax.tree_util.tree_map(
