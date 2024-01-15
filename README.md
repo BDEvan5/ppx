@@ -2,17 +2,18 @@
 
 This repo features a high-speed JAX implementation of the [Proximal Policy Optimisation (PPO)](https://arxiv.org/abs/1707.06347) algorithm.
 The algorithm is given as a single file implementation so that all the design choices are clear.
+  Training average of 3 seeds | Training average of 3 seeds 
 
-| Cartpole | SpaceInvaders |
-| :----: | :----: |
-| ![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) | 
+CartPole-v1                  | SpaceInvaders 
+:--------------------------: | :--------------------------:
+![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) 
 
 
 ## Usage
 
 The algorithm is run by running the python script from the home directory. A custom config file can be given as follows,
 ```python
-python3 ppx/systems/ppo.py --config-name=ppo_CartPole.yaml
+python3 ppx/systems/ppo.py --config-name=ppo_MinAtar.yaml
 ```
 Since [hydra](https://hydra.cc/docs/intro/) is used for managing configurations, overide parameters can be passed as arguments to this command.
 The default parameters can be changes in the relevant config file.

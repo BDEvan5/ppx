@@ -1,4 +1,4 @@
-seed: 42
+seed: 44
 total_training_steps: 5e5
 rollout_length: 128
 
