@@ -1,4 +1,4 @@
-seed: 42
+seed: 44
 total_training_steps: 8e6
 rollout_length: 256
 
@@ -7,8 +7,7 @@ learning_rate: 2.5e-4
 ppo_epochs: 4
 num_minibatches: 4
 
-num_envs: 8
-# num_envs: 1
+num_envs: 16
 num_evaluation: 50
 
 gamma: 0.99 # Discounting factor.
