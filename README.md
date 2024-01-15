@@ -3,6 +3,10 @@
 This repo features a high-speed JAX implementation of the [Proximal Policy Optimisation (PPO)](https://arxiv.org/abs/1707.06347) algorithm.
 The algorithm is given as a single file implementation so that all the design choices are clear.
 
+| Cartpole | SpaceInvaders |
+| :----: | :----: |
+| ![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) | 
+
 
 ## Usage
 
@@ -13,13 +17,8 @@ python3 ppx/systems/ppo.py --config-name=ppo_CartPole.yaml
 Since [hydra](https://hydra.cc/docs/intro/) is used for managing configurations, overide parameters can be passed as arguments to this command.
 The default parameters can be changes in the relevant config file.
 
-A simple function to plot the return during training is provided in the `notebooks/` directory.
+The `notebooks/` directory contains simple .ipynb files to proide basic plotting functions.
 
-## Results
-
-| Cartpole | SpaceInvaders |
-| :----: | :----: |
-| ![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) | 
 
 ## Installation
 
@@ -43,7 +42,6 @@ Note JAX must be separately installed for the specific device used. For straight
 ```
 pip install -U "jax[cpu]"
 ```
-
 In order to use JAX on your accelerators, you can find more details in the [JAX documentation](https://github.com/google/jax#installation).
 
 ## Development
