@@ -1,15 +1,4 @@
 seed: 42
-# num_updates: 250
-# num_updates: 4000
-# num_updates: 32000
-total_training_steps: 5e5
-# total_training_steps: 8e6
-rollout_length: 128
-# rollout_length: 256
-#TODO: add an update_batch_size when it is vectorised for improved execution
-
-# learning_rate: 5e-4
-learning_rate: 2.5e-4seed: 44
 total_training_steps: 5e5
 rollout_length: 128
 
@@ -39,40 +28,4 @@ logger:
   system_name: "ppo"
   base_exp_path: results
   json_path: ~ # automatically sets path based on params
-  should_log: True
-
-ppo_epochs: 4
-num_minibatches: 4
-
-num_envs: 4
-# num_envs: 16
-num_evaluation: 15
-# num_evaluation: 100
-
-gamma: 0.99 # Discounting factor.
-gae_lambda: 0.95
-clip_eps: 0.2
-ent_coef: 0.01
-vf_coef: 0.5
-max_grad_norm: 0.5
-
-# env_name: "Asterix-MinAtar"
-# env_name: "Freeway-MinAtar"
-# env_name: "SpaceInvaders-MinAtar"
-# env_name: "MountainCar-v0" # does not work
-# env_name: "Acrobot-v1"
-env_name: "CartPole-v1"
-ANNEAL_LR: False
-ACTIVATION: "tanh"
-DEBUG: False
-evaluation_greedy: False
-num_eval_episodes: 5
-
-logger:
-  system_name: "PPO"
-  base_exp_path: results
-  json_path: ppo/env4
-  # json_path: experiments/env16
-  # json_path: ppo/test2
-  # json_path: ~
   should_log: True

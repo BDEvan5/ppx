@@ -5,7 +5,7 @@ import numpy as np
 from functools import partial
 from typing import Optional, Tuple, Union, Any
 from gymnax.environments import environment, spaces
-from ppox.types import LogEnvState
+from ppx.types import LogEnvState
 
 class GymnaxWrapper(object):
     """Base class for Gymnax wrappers."""

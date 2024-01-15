@@ -8,7 +8,7 @@ The algorithm is given as a single file implementation so that all the design ch
 
 The algorithm is run by running the python script from the home directory. A custom config file can be given as follows,
 ```python
-python3 ppox/systems/ppo.py --config-name=ppo_CartPole.yaml
+python3 ppx/systems/ppo.py --config-name=ppo_CartPole.yaml
 ```
 Since [hydra](https://hydra.cc/docs/intro/) is used for managing configurations, overide parameters can be passed as arguments to this command.
 The default parameters can be changes in the relevant config file.

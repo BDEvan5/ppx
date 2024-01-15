@@ -24,7 +24,7 @@ import logging
 import os
 import time
 
-from ppox.types import ExperimentOutput
+from ppx.types import ExperimentOutput
 
 class JsonLogger:
     def __init__(self, cfg: Dict) -> None:

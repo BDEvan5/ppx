@@ -19,10 +19,10 @@ from rich.pretty import pprint
 from colorama import Fore, Style
 from omegaconf import DictConfig, OmegaConf
 
-from ppox.wrappers import LogWrapper, FlattenObservationWrapper
-from ppox.types import Transition, LearnerState, ExperimentOutput, NetworkApply, LearnerFn
-from ppox.logger import logger_setup
-from ppox.evaluator import evaluator_setup
+from ppx.wrappers import LogWrapper, FlattenObservationWrapper
+from ppx.types import Transition, LearnerState, ExperimentOutput, NetworkApply, LearnerFn
+from ppx.logger import logger_setup
+from ppx.evaluator import evaluator_setup
 
 
 class ActorCritic(nn.Module):

@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from ppox.types import ExperimentOutput, EvalState
+from ppx.types import ExperimentOutput, EvalState
 
 
 
