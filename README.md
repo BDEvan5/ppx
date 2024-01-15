@@ -2,9 +2,8 @@
 
 This repo features a high-speed JAX implementation of the [Proximal Policy Optimisation (PPO)](https://arxiv.org/abs/1707.06347) algorithm.
 The algorithm is given as a single file implementation so that all the design choices are clear.
-  Training average of 3 seeds | Training average of 3 seeds 
 
-CartPole-v1                  | SpaceInvaders 
+Training Reward                  | Training Reward   
 :--------------------------: | :--------------------------:
 ![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) 
 
