@@ -37,8 +37,8 @@ class JsonLogger:
             self.path = (
                 f"{cfg['logger']['base_exp_path']}/"
                 + f"{cfg['logger']['system_name']}/{cfg['env_name']}"
-                + f"/envs_{cfg['num_envs']}/seed_{cfg['seed']}/"
-                + f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                + f"/envs_{cfg['num_envs']}/seed_{cfg['seed']}"
+                # + f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
             )
 
         self.file_name = "metrics.json"
@@ -224,7 +224,7 @@ def get_logger_tools(logger: JsonLogger) -> LogFn:
                 f"Entropy {float(np.mean(entropy)):.3f}"
             )
             logger.console_logger.info(
-                f"{Fore.MAGENTA}{Style.BRIGHT}TRAINER: {log_string}{Style.RESET_ALL}"
+                f"{Fore.MAGENTA}{Style.BRIGHT}TRAINER:   {log_string}{Style.RESET_ALL}"
             )
         else:
             logger.console_logger.info(

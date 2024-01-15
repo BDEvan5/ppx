@@ -18,9 +18,10 @@ from typing import Dict, Sequence, Tuple, Callable, Any
 from rich.pretty import pprint
 from colorama import Fore, Style
 from omegaconf import DictConfig, OmegaConf
+from copy import deepcopy
 
 from ppox.wrappers import LogWrapper, FlattenObservationWrapper
-from ppox.types import Transition, LearnerState, ExperimentOutput, NetworkApply, LearnerFn
+from ppox.types import Transition, EwmaLearnerState, EwmaExperimentOutput, NetworkApply, EwmaLearnerFn
 from ppox.logger import logger_setup
 from ppox.evaluator import evaluator_setup
 
@@ -63,20 +64,22 @@ class ActorCritic(nn.Module):
         return pi, jnp.squeeze(critic, axis=-1)
 
 
+
+
 def get_learner_fn(
     env: Environment,
     env_params: EnvParams,
     network_apply_fn: NetworkApply,
     update_fn: optax.TransformUpdateFn,
     config: Dict,
-) -> Callable[[LearnerState], ExperimentOutput]:
+) -> Callable[[EwmaLearnerState], EwmaExperimentOutput]:
     # TRAINING LOOP
-    def _update_step(learner_state: LearnerState, _: Any) -> Tuple[LearnerState, Tuple]:
+    def _update_step(learner_state: EwmaLearnerState, _: Any) -> Tuple[EwmaLearnerState, Tuple]:
         # COLLECT TRAJECTORIES
         def _env_step(
-            learner_state: LearnerState, _: Any
-        ) -> Tuple[LearnerState, Transition]:
-            network_params, opt_states, env_state, last_obs, rng = learner_state
+            learner_state: EwmaLearnerState, _: Any
+        ) -> Tuple[EwmaLearnerState, Transition]:
+            network_params, ewma_params, opt_states, env_state, last_obs, rng, total_weight = learner_state
 
             # SELECT ACTION
             rng, _rng = jax.random.split(rng)
@@ -93,8 +96,8 @@ def get_learner_fn(
             transition = Transition(
                 done, action, value, reward, log_prob, last_obs, info
             )
-            learner_state = LearnerState(
-                network_params, opt_states, env_state, obsv, rng
+            learner_state = EwmaLearnerState(
+                network_params, ewma_params, opt_states, env_state, obsv, rng, total_weight
             )
             return learner_state, transition
 
@@ -104,7 +107,7 @@ def get_learner_fn(
         )
 
         # CALCULATE ADVANTAGE
-        network_params, opt_states, env_state, obsv, rng = learner_state
+        network_params, ewma_params, opt_states, env_state, obsv, rng, total_weight = learner_state
         _, last_val = network_apply_fn(network_params, obsv)
 
         def _calculate_gae(traj_batch: Transition, last_val: jnp.ndarray) -> Tuple:
@@ -148,6 +151,8 @@ def get_learner_fn(
                     # RERUN NETWORK
                     pi, value = network_apply_fn(params, traj_batch.obs)
                     log_prob = pi.log_prob(traj_batch.action)
+                    prox_pi, _prox_value = network_apply_fn(ewma_params, traj_batch.obs)
+                    prox_log_prob = prox_pi.log_prob(traj_batch.action)
 
                     # CALCULATE VALUE LOSS
                     value_pred_clipped = traj_batch.value + (
@@ -160,8 +165,14 @@ def get_learner_fn(
                     )
 
                     # CALCULATE ACTOR LOSS
-                    ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                    gae = (gae - gae.mean()) / (gae.std() + 1e-8) # Advantage normalisation
+                    # this is where the modifications are going to come. Currently we use the log probs that we calculated with the current policy and the behavioural policy
+                    # this should be changed to use the log probs calculated with the behavioural policy and the ewma policy
+                    # this is the only change that needs to be made to the code....
+                    # I think that I can use the same network, I just need to adjust the parameters accordingly... 
+                    # 
+                    ratio = jnp.exp(log_prob - prox_log_prob)
+                    # ratio = jnp.exp(log_prob - traj_batch.log_prob) #ol
+                    gae = (gae - gae.mean()) / (gae.std() + 1e-8) #Advantage normalisation
                     loss_actor1 = ratio * gae
                     loss_actor2 = (
                         jnp.clip(
@@ -172,6 +183,8 @@ def get_learner_fn(
                         * gae
                     )
                     loss_actor = -jnp.minimum(loss_actor1, loss_actor2)
+                    ratio2 = jnp.exp(prox_log_prob - traj_batch.log_prob)
+                    loss_actor = loss_actor * ratio2 # implementing the new ratio of prox to behaviour.
                     loss_actor = loss_actor.mean()
                     entropy = pi.entropy().mean()
 
@@ -197,11 +210,13 @@ def get_learner_fn(
 
             (
                 network_params,
+                ewma_params,
                 opt_states,
                 traj_batch,
                 advantages,
                 targets,
                 rng,
+                total_weight,
             ) = update_state
             rng, _rng = jax.random.split(rng)
             # Batching and Shuffling
@@ -224,13 +239,25 @@ def get_learner_fn(
             (new_network_params, new_opt_states), total_loss = jax.lax.scan(
                 _update_minbatch, (network_params, opt_states), minibatches
             )
+
+            # Update Ewma Parameters
+            ewma_decay = config["ewma_decay"]
+            new_weight = 1 + total_weight * ewma_decay
+            new_ewma_params = jax.tree_util.tree_map(
+                lambda p, e: p / new_weight + e * ewma_decay * total_weight / new_weight, 
+                network_params, 
+                ewma_params,
+            )
+
             update_state = (
                 new_network_params,
+                new_ewma_params,
                 new_opt_states,
                 traj_batch,
                 advantages,
                 targets,
                 rng,
+                new_weight, #return updated weight
             )
 
             return update_state, total_loss
@@ -238,16 +265,18 @@ def get_learner_fn(
         # Updating Training State and Metrics:
         update_state = (
             network_params,
+            ewma_params,
             opt_states,
             traj_batch,
             advantages,
             targets,
             rng,
+            total_weight,
         )
         update_state, loss_info = jax.lax.scan(
             _update_epoch, update_state, None, config["ppo_epochs"]
         )
-        network_params, opt_states, traj_batch, advantages, targets, rng = update_state
+        network_params, ewma_params, opt_states, traj_batch, advantages, targets, rng, total_weight = update_state
         metric = traj_batch.info
 
         # Debugging mode
@@ -265,16 +294,16 @@ def get_learner_fn(
 
             jax.debug.callback(callback, metric)
 
-        learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
+        learner_state = EwmaLearnerState(network_params, ewma_params, opt_states, env_state, obsv, rng, total_weight)
         return learner_state, (metric, loss_info)
 
-    def learner_fn(learner_state: LearnerState) -> ExperimentOutput:
+    def learner_fn(learner_state: EwmaLearnerState) -> EwmaExperimentOutput:
         learner_state, (traj_info, loss_info) = jax.lax.scan(
             _update_step, learner_state, None, config["num_updates_per_eval"]
         )
 
         total_loss, (value_loss, loss_actor, entropy) = loss_info
-        return ExperimentOutput(
+        return EwmaExperimentOutput(
             learner_state, traj_info, total_loss, value_loss, loss_actor, entropy
         )
 
@@ -283,7 +312,7 @@ def get_learner_fn(
 
 def learner_setup(
     config: Dict, rng: chex.Array, env: Environment, env_params: EnvParams
-) -> Tuple[LearnerFn, LearnerState, ActorCritic]:
+) -> Tuple[EwmaLearnerFn, EwmaLearnerState, ActorCritic]:
     def linear_schedule(count: int) -> float:
         frac = (
             1.0
@@ -300,6 +329,7 @@ def learner_setup(
     rng, _rng = jax.random.split(rng)
     init_x = jnp.zeros(env.observation_space(env_params).shape)
     network_params = network.init(_rng, init_x)
+    ewma_params = deepcopy(network_params)
     if config["ANNEAL_LR"]:
         optimiser = optax.chain(
             optax.clip_by_global_norm(config["max_grad_norm"]),
@@ -317,7 +347,8 @@ def learner_setup(
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
     opt_states = optimiser.init(network_params)
-    learner_state = LearnerState(network_params, opt_states, env_state, obsv, rng)
+    total_weight = 1 # initialise
+    learner_state = EwmaLearnerState(network_params, ewma_params, opt_states, env_state, obsv, rng, total_weight)
 
     learn = get_learner_fn(env, env_params, network.apply, optimiser.update, config)
 
@@ -338,7 +369,7 @@ def run_experiment(config: Dict) -> None:
     env = LogWrapper(env)
 
     learn, learner_state, network = learner_setup(config, rng, env, env_params)
-    network_params, opt_states, env_state, obsv, rng = learner_state
+    network_params, ewma_params, opt_states, env_state, obsv, rng, total_weight = learner_state
     rng, _rng = jax.random.split(rng)
     rng, eval_rng = jax.random.split(rng)
 
@@ -380,7 +411,7 @@ def run_experiment(config: Dict) -> None:
 
 
 @hydra.main(
-    config_path="../configs", config_name="default_ppo.yaml", version_base="1.2"
+    config_path="../configs", config_name="default_ppo_ewma.yaml", version_base="1.2"
 )
 def hydra_entry_point(cfg: DictConfig) -> None:
     """Experiment entry point."""

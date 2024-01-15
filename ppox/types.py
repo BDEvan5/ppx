@@ -34,6 +34,14 @@ class LearnerState(NamedTuple):
     rng_key: chex.Array
 
 
+class EwmaLearnerState(NamedTuple):
+    network_params: chex.Array
+    ewma_params: chex.Array
+    opt_state: chex.Array
+    env_state: LogEnvState
+    last_observation: chex.Array
+    rng_key: chex.Array
+    total_weight: chex.Numeric
 
 
 class ExperimentOutput(NamedTuple):
@@ -43,6 +51,15 @@ class ExperimentOutput(NamedTuple):
     value_loss: Optional[chex.Array] = None
     loss_actor: Optional[chex.Array] = None
     entropy: Optional[chex.Array] = None
+
+class EwmaExperimentOutput(NamedTuple):
+    learner_state: LearnerState
+    episodes_info: Dict[str, chex.Array]
+    total_loss: Optional[chex.Array] = None
+    value_loss: Optional[chex.Array] = None
+    loss_actor: Optional[chex.Array] = None
+    entropy: Optional[chex.Array] = None
+
 
 class EvalState(NamedTuple):
     """State of the evaluator."""
@@ -58,6 +75,7 @@ class EvalState(NamedTuple):
 
 NetworkApply = Callable[[FrozenDict, chex.Array], Tuple[distrax.Distribution, chex.Array]]
 LearnerFn = Callable[[LearnerState], ExperimentOutput]
+EwmaLearnerFn = Callable[[EwmaLearnerState], EwmaExperimentOutput]
 EvalFn = Callable[[FrozenDict, chex.PRNGKey], ExperimentOutput]
 
 
