@@ -6,10 +6,10 @@ LONG_DESCRIPTION = 'JAX implementations for PPO algorithms'
 
 # Setting up
 setup(
-        name="ppox", 
+        name="ppx", 
         version=VERSION,
         author="Benjamin Evans",
-        author_email="<bdevans@sun.ac.za>",
+        author_email="<benjaminevans316@gmail.com>",
         description=DESCRIPTION,
         long_description=LONG_DESCRIPTION,
         packages=find_packages(),
