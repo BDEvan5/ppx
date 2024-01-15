@@ -5,7 +5,7 @@ The algorithm is given as a single file implementation so that all the design ch
 
 Training Reward                  | Training Reward   
 :--------------------------: | :--------------------------:
-![](Images/Cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) 
+![](Images/cartpole_mean.png) | ![](Images/SpaceInvaders_mean.png) 
 
 
 ## Usage
